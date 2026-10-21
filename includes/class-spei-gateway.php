@@ -101,7 +101,7 @@ final class Spei_Gateway extends \WC_Payment_Gateway {
         try {
             return $this->prepare_payment( $id );
         } catch ( \Throwable $error ) {
-            Logger::error( 'SPEI checkout interrupted.', array( 'order_id' => $id ) );
+            Logger::error( 'SPEI checkout interrupted.', array( 'order_id' => $id, 'exception_type' => get_class( $error ) ) );
             wc_add_notice( __( 'No se pudo preparar el pago. Contacta a la tienda antes de volver a intentarlo.', 'tkila-sinergypay' ), 'error' );
             return array( 'result' => 'failure' );
         } finally {
@@ -142,7 +142,17 @@ final class Spei_Gateway extends \WC_Payment_Gateway {
             $order->update_meta_data( '_tkila_sinergypay_create_attempted', 'yes' );
             $order->save();
             $data = $client->create_order( $amount, $order->get_meta( '_tkila_sinergypay_description' ), $order->get_meta( '_tkila_sinergypay_reference' ) );
-            if ( is_wp_error( $data ) || ! is_string( $data['id'] ?? null ) || '' === $data['id'] ) {
+            if ( is_wp_error( $data ) ) {
+                $error_data = $data->get_error_data();
+                // Retry only when the API definitively rejected the request.
+                // Keep the guard for transport/5xx/invalid-response ambiguity.
+                if ( is_array( $error_data ) && ! empty( $error_data['definitive'] ) ) {
+                    $order->delete_meta_data( '_tkila_sinergypay_create_attempted' );
+                    $order->save();
+                }
+                return $this->payment_error();
+            }
+            if ( ! is_string( $data['id'] ?? null ) || '' === $data['id'] ) {
                 return $this->payment_error();
             }
             $order->update_meta_data( '_tkila_sinergypay_order_id', $data['id'] );
@@ -170,7 +180,16 @@ final class Spei_Gateway extends \WC_Payment_Gateway {
             $order->update_meta_data( '_tkila_sinergypay_clabe_attempted', 'yes' );
             $order->save();
             $data = $client->create_clabe( $order->get_meta( '_tkila_sinergypay_order_id' ) );
-            if ( is_wp_error( $data ) || ! is_string( $data['clabe'] ?? null ) || '' === trim( sanitize_text_field( $data['clabe'] ) ) ) {
+            if ( is_wp_error( $data ) ) {
+                $error_data = $data->get_error_data();
+                // A definitive rejection is safe to retry; ambiguous outcomes are not.
+                if ( is_array( $error_data ) && ! empty( $error_data['definitive'] ) ) {
+                    $order->delete_meta_data( '_tkila_sinergypay_clabe_attempted' );
+                    $order->save();
+                }
+                return $this->payment_error();
+            }
+            if ( ! is_string( $data['clabe'] ?? null ) || '' === trim( sanitize_text_field( $data['clabe'] ) ) ) {
                 return $this->payment_error();
             }
             // TODO SinergyPay: clarify the inconsistent 16-digit example; no length assumption.
