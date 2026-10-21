@@ -101,7 +101,7 @@ final class Spei_Gateway extends \WC_Payment_Gateway {
         try {
             return $this->prepare_payment( $id );
         } catch ( \Throwable $error ) {
-            Logger::error( 'SPEI checkout interrupted.', array( 'order_id' => $id ) );
+            Logger::error( 'SPEI checkout interrupted.', array( 'order_id' => $id, 'exception_type' => get_class( $error ) ) );
             wc_add_notice( __( 'No se pudo preparar el pago. Contacta a la tienda antes de volver a intentarlo.', 'tkila-sinergypay' ), 'error' );
             return array( 'result' => 'failure' );
         } finally {
