@@ -50,7 +50,7 @@ Fuente del contrato: `docs/V3-Comercios-SPEI.pdf`, páginas 3-8. No se implement
 4. Configurar en SinergyPay la URL HTTPS `https://TU-TIENDA/wp-json/tkila-sinergypay/v1/webhook`. El PDF no detalla el procedimiento de alta de la URL; solicitarlo a soporte si no está disponible en el portal.
 5. Crear un pedido de prueba con el checkout clásico, comprobar orden remota y CLABE, y enviar una notificación Sandbox genuina. Hasta resolver la acreditación pendiente, verificar en el portal de SinergyPay y realizar cualquier acreditación manual mediante el proceso administrativo de la tienda.
 
-El ajuste Debug controla logs de WooCommerce con fuente `tkila-sinergypay`. Solo se registran mensajes operativos fijos y contexto permitido; no se registran cuerpos, credenciales, firmas ni datos bancarios.
+El ajuste Debug controla los logs informativos. Los errores SPEI se registran siempre en WooCommerce con fuente `tkila-sinergypay` y contexto sanitizado (estado HTTP, motivo técnico, claves superiores de la respuesta y endpoint). Nunca se registran cuerpos de respuesta, credenciales, firmas ni datos bancarios.
 
 ### Webhook: autenticidad separada de acreditación
 
