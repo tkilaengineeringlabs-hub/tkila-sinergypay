@@ -67,7 +67,7 @@ final class Api_Client {
             $reason = JSON_ERROR_NONE === json_last_error() ? 'json_not_object' : 'invalid_json';
         } elseif ( ! array_key_exists( 'rc', $data ) ) {
             $reason = 'missing_rc';
-        } elseif ( 0 !== $data['rc'] ) {
+        } elseif ( ! in_array( $data['rc'], array( 0, '0' ), true ) ) {
             $reason = 'nonzero_rc';
         } elseif ( ! isset( $data['data'] ) || ! is_array( $data['data'] ) ) {
             $reason = 'missing_or_invalid_data';
@@ -84,7 +84,15 @@ final class Api_Client {
                 $context['api_rc'] = is_string( $data['rc'] ) ? sanitize_text_field( $data['rc'] ) : $data['rc'];
             }
             Logger::error( 'SPEI API response rejected.', $context );
-            return new WP_Error( 'tkila_sinergypay_response', 'SinergyPay no devolvió una respuesta válida.' );
+            // A 4xx response or an explicit non-zero API rc confirms rejection.
+            // A 5xx, transport failure, or malformed success response remains ambiguous.
+            $definitive = ( $status >= 400 && $status < 500 ) ||
+                ( is_array( $data ) && array_key_exists( 'rc', $data ) && ! in_array( $data['rc'], array( 0, '0' ), true ) );
+            return new WP_Error(
+                'tkila_sinergypay_response',
+                'SinergyPay no devolvió una respuesta válida.',
+                array( 'definitive' => $definitive )
+            );
         }
 
         return $data['data'];
