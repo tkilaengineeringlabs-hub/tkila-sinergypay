@@ -26,6 +26,7 @@ final class Api_Client {
     /** Documented private-key POST endpoints only (PDF pp. 3-5). */
     private function request( string $path, array $body ) {
         if ( 'sandbox' !== $this->environment || '' === trim( $this->api_key ) ) {
+            Logger::error( 'SPEI request blocked by local configuration.', array( 'reason' => 'invalid_environment_or_empty_key', 'endpoint' => $path ) );
             return new WP_Error( 'tkila_sinergypay_configuration', 'SPEI Sandbox requires a private API key.' );
         }
 
@@ -46,15 +47,43 @@ final class Api_Client {
         );
 
         if ( is_wp_error( $response ) ) {
-            Logger::error( 'SPEI transport failed; outcome requires reconciliation.' );
+            Logger::error( 'SPEI transport failed; outcome requires reconciliation.', array(
+                'reason'         => 'transport_error',
+                'transport_code' => sanitize_key( $response->get_error_code() ),
+                'endpoint'       => $path,
+            ) );
             return new WP_Error( 'tkila_sinergypay_transport', 'No se pudo confirmar la respuesta de SinergyPay.' );
         }
 
-        $status = wp_remote_retrieve_response_code( $response );
-        $data   = json_decode( wp_remote_retrieve_body( $response ), true );
-        if ( $status < 200 || $status >= 300 || ! is_array( $data ) ||
-            ! isset( $data['rc'] ) || 0 !== $data['rc'] || ! isset( $data['data'] ) || ! is_array( $data['data'] ) ) {
-            Logger::error( 'SPEI API response rejected.', array( 'http_status' => $status ) );
+        $status      = wp_remote_retrieve_response_code( $response );
+        $raw_body    = wp_remote_retrieve_body( $response );
+        $data        = json_decode( $raw_body, true );
+        $response_keys = is_array( $data ) ? implode( ',', array_slice( array_map( 'sanitize_key', array_keys( $data ) ), 0, 12 ) ) : '';
+
+        $reason = '';
+        if ( $status < 200 || $status >= 300 ) {
+            $reason = 'http_status_not_success';
+        } elseif ( ! is_array( $data ) ) {
+            $reason = JSON_ERROR_NONE === json_last_error() ? 'json_not_object' : 'invalid_json';
+        } elseif ( ! array_key_exists( 'rc', $data ) ) {
+            $reason = 'missing_rc';
+        } elseif ( 0 !== $data['rc'] ) {
+            $reason = 'nonzero_rc';
+        } elseif ( ! isset( $data['data'] ) || ! is_array( $data['data'] ) ) {
+            $reason = 'missing_or_invalid_data';
+        }
+
+        if ( '' !== $reason ) {
+            $context = array(
+                'http_status'   => $status,
+                'reason'        => $reason,
+                'response_keys' => $response_keys,
+                'endpoint'      => $path,
+            );
+            if ( is_array( $data ) && ( is_int( $data['rc'] ?? null ) || is_string( $data['rc'] ?? null ) ) ) {
+                $context['api_rc'] = is_string( $data['rc'] ) ? sanitize_text_field( $data['rc'] ) : $data['rc'];
+            }
+            Logger::error( 'SPEI API response rejected.', $context );
             return new WP_Error( 'tkila_sinergypay_response', 'SinergyPay no devolvió una respuesta válida.' );
         }
 
