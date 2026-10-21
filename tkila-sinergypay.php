@@ -6,6 +6,7 @@
  * Author: Tkila Engineering Labs
  * Text Domain: tkila-sinergypay
  * Requires PHP: 8.0
+ * Requires Plugins: woocommerce
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -20,7 +21,12 @@ require_once TKILA_SINERGYPAY_PATH . 'includes/class-plugin.php';
 add_action(
     'plugins_loaded',
     static function (): void {
-        if ( ! class_exists( 'WooCommerce' ) ) {
+        if ( ! class_exists( 'WooCommerce' ) || ! class_exists( 'WC_Payment_Gateway' ) ) {
+            add_action( 'admin_notices', static function (): void {
+                if ( current_user_can( 'activate_plugins' ) ) {
+                    echo '<div class="notice notice-error"><p>' . esc_html__( 'Tkila SinergyPay requiere WooCommerce instalado y activo.', 'tkila-sinergypay' ) . '</p></div>';
+                }
+            } );
             return;
         }
 

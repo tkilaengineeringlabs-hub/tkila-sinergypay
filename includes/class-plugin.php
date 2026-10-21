@@ -28,6 +28,8 @@ final class Plugin {
     private function load_dependencies(): void {
         require_once TKILA_SINERGYPAY_PATH . 'includes/class-logger.php';
         require_once TKILA_SINERGYPAY_PATH . 'includes/class-api-client.php';
+        require_once TKILA_SINERGYPAY_PATH . 'includes/class-order-lock.php';
+        require_once TKILA_SINERGYPAY_PATH . 'includes/class-payment-confirmation.php';
         require_once TKILA_SINERGYPAY_PATH . 'includes/class-spei-gateway.php';
         require_once TKILA_SINERGYPAY_PATH . 'includes/class-webhook-handler.php';
         require_once TKILA_SINERGYPAY_PATH . 'includes/class-card-gateway.php';

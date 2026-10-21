@@ -20,11 +20,12 @@ final class Logger {
             return;
         }
 
-        foreach ( array( 'api_key', 'authorization', 'cvv', 'cvc', 'pan', 'card_number' ) as $key ) {
-            if ( array_key_exists( $key, $context ) ) {
-                $context[ $key ] = '[REDACTED]';
-            }
+        $settings = get_option( 'woocommerce_tkila_sinergypay_spei_settings', array() );
+        if ( 'yes' !== ( $settings['debug'] ?? 'no' ) ) {
+            return;
         }
+        // Allowlist operational context only; never dump remote bodies, headers or errors.
+        $context = array_intersect_key( $context, array_flip( array( 'order_id', 'http_status', 'reason' ) ) );
 
         $context['source'] = self::SOURCE;
         wc_get_logger()->log( $level, $message, $context );

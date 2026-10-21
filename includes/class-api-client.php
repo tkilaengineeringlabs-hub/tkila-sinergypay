@@ -7,59 +7,57 @@ use WP_Error;
 defined( 'ABSPATH' ) || exit;
 
 final class Api_Client {
-    private string $base_url;
+    private string $environment;
     private string $api_key;
 
     public function __construct( string $environment, string $api_key ) {
-        // TODO: Confirm exact production URL from official SinergyPay documentation before enabling production.
-        $this->base_url = 'sandbox' === $environment
-            ? 'https://sandbox.sinergypay.mx/v2/'
-            : 'https://sinergypay.mx/v2/';
-        $this->api_key = $api_key;
+        $this->environment = $environment;
+        $this->api_key     = $api_key;
     }
 
-    /**
-     * Low-level request helper. Endpoint-specific payloads/headers must follow official docs.
-     *
-     * @return array<string,mixed>|WP_Error
-     */
-    public function request( string $method, string $path, array $body = array() ) {
-        if ( '' === trim( $this->api_key ) ) {
-            return new WP_Error( 'tkila_sinergypay_missing_key', __( 'SinergyPay API key is missing.', 'tkila-sinergypay' ) );
+    public function create_order( string $amount, string $description, string $reference ) {
+        return $this->request( 'orders/', compact( 'amount', 'description', 'reference' ) );
+    }
+
+    public function create_clabe( string $order_id ) {
+        return $this->request( 'orders/' . rawurlencode( $order_id ) . '/clabe', array() );
+    }
+
+    /** Documented private-key POST endpoints only (PDF pp. 3-5). */
+    private function request( string $path, array $body ) {
+        if ( 'sandbox' !== $this->environment || '' === trim( $this->api_key ) ) {
+            return new WP_Error( 'tkila_sinergypay_configuration', 'SPEI Sandbox requires a private API key.' );
         }
 
-        $url = trailingslashit( $this->base_url ) . ltrim( $path, '/' );
-
-        // TODO: Replace Authorization header format only after confirming it against official docs.
-        $args = array(
-            'method'  => strtoupper( $method ),
-            'timeout' => 30,
-            'headers' => array(
-                'Accept'       => 'application/json',
-                'Content-Type' => 'application/json',
-                'Authorization' => $this->api_key,
-            ),
+        $response = wp_remote_request(
+            'https://sandbox.sinergypay.mx/v2/' . $path,
+            array(
+                'method'      => 'POST',
+                'timeout'     => 30,
+                'redirection' => 0,
+                'headers'     => array(
+                    'Authorization' => 'Basic ' . base64_encode( $this->api_key . ':' ),
+                    'User-Agent'    => 'TkilaSinergyPay/' . TKILA_SINERGYPAY_VERSION,
+                    'Accept'        => 'application/json',
+                    'Content-Type'  => 'application/json',
+                ),
+                'body' => wp_json_encode( (object) $body ),
+            )
         );
 
-        if ( ! empty( $body ) ) {
-            $args['body'] = wp_json_encode( $body );
-        }
-
-        $response = wp_remote_request( $url, $args );
         if ( is_wp_error( $response ) ) {
-            Logger::error( 'SinergyPay HTTP request failed.', array( 'path' => $path, 'error' => $response->get_error_message() ) );
-            return $response;
+            Logger::error( 'SPEI transport failed; outcome requires reconciliation.' );
+            return new WP_Error( 'tkila_sinergypay_transport', 'No se pudo confirmar la respuesta de SinergyPay.' );
         }
 
         $status = wp_remote_retrieve_response_code( $response );
-        $raw    = wp_remote_retrieve_body( $response );
-        $data   = json_decode( $raw, true );
-
-        if ( $status < 200 || $status >= 300 ) {
-            Logger::error( 'SinergyPay returned a non-success status.', array( 'path' => $path, 'status' => $status ) );
-            return new WP_Error( 'tkila_sinergypay_api_error', __( 'SinergyPay rejected the request.', 'tkila-sinergypay' ), array( 'status' => $status ) );
+        $data   = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( $status < 200 || $status >= 300 || ! is_array( $data ) ||
+            ! isset( $data['rc'] ) || 0 !== $data['rc'] || ! isset( $data['data'] ) || ! is_array( $data['data'] ) ) {
+            Logger::error( 'SPEI API response rejected.', array( 'http_status' => $status ) );
+            return new WP_Error( 'tkila_sinergypay_response', 'SinergyPay no devolvió una respuesta válida.' );
         }
 
-        return is_array( $data ) ? $data : array();
+        return $data['data'];
     }
 }
