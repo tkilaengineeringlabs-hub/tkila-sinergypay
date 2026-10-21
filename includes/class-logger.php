@@ -30,7 +30,7 @@ final class Logger {
         }
 
         // Strict allowlist: never log response bodies, headers, credentials or bank data.
-        $allowed = array( 'order_id', 'http_status', 'reason', 'api_rc', 'response_keys', 'transport_code' );
+        $allowed = array( 'order_id', 'http_status', 'reason', 'api_rc', 'response_keys', 'transport_code', 'endpoint' );
         $context = array_intersect_key( $context, array_flip( $allowed ) );
         $context['source'] = self::SOURCE;
 
